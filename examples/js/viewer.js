@@ -79,6 +79,7 @@ function setQuality(value){
 };
 
 function setMaterial(value){
+	return Potree.PointColorType[value.replace(' ', '_').toUpperCase()];
 	if(value === "RGB"){
 		pointColorType = Potree.PointColorType.RGB;
 	}else if(value === "Color"){
