@@ -140,10 +140,9 @@ LT.Helpers.Classes.inherit = function (parent, self,constructor, ignoreConstruct
     self = self || {};
     ignoreConstructor = ignoreConstructor || false;
 
-    var selfObject= function(){}
+    var selfObject = function(){}
     selfObject.prototype = Object.create(parent.prototype);
     if (parent.length > constructor.length && !ignoreConstructor){
-        document.getElementById("demo").innerHTML ="fail";
         return;
     }
 
@@ -215,7 +214,7 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
     {
         renderLocation: null,
         //renderer: null,
-        processor: null,
+        activeProcessor: null,
         //camera: null,
         toolManager: null,
         scenePointCloud: null,
@@ -236,7 +235,7 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             this.composedScene.camera.updateProjectionMatrix();
 
             this.composedScene.renderer.setSize(width, height);
-            this.processor.resize(width,height);
+            this.activeProcessor.resize(width,height);
 
             if(showSkybox && this.composedScene.skybox){
                 this.composedScene.skybox.camera.rotation.copy(this.composedScene.camera.rotation);
@@ -245,7 +244,8 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
                 this.composedScene.renderer.render(this.composedScene.sceneBG, this.composedScene.cameraBG);
             }
 
-            this.processor.render(this.composedScene, this.renderer);
+            this.activeProcessor.render(this.composedScene, this.renderer);
+            //this.processor.render(this.composedScene, this.renderer);
             this.composedScene.renderer.render(this.composedScene.scene, this.composedScene.camera);
             this.composedScene.renderer.render(this.composedScene.scenePointCloud, this.composedScene.camera);
             this.toolManager.postRender();
@@ -262,7 +262,13 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
         addProcessor:function(name, processor){
             this.processors[name] = processor;
         },
+        setActiveProcessor:function(name){
+            this.activeProcessor = this.processors[name];
+        },
         getCurrentScene:function(){ return this.composedScene; },
+        addClipBoxes: function(clipBoxes){
+            this.clipBoxes = this.clipBoxes.concat(clipBoxes);
+        },
         update: function(){
             this.clipBoxes = [];
             if(this.composedScene.pointcloud){
@@ -654,9 +660,7 @@ LT.Defns.Tools.ProfileTool = LT.Helpers.Classes.inherit(LT.Defns.Tools.BaseTool,
                 }
             }
 
-            var composedScene = sceneManager.getCurrentScene();
-            sceneManager.addClipBoxes(clipBoxes);
-
+            this.sceneManager.addClipBoxes(clipBoxes);
         }
     },
     function(sceneManager){
@@ -664,6 +668,35 @@ LT.Defns.Tools.ProfileTool = LT.Helpers.Classes.inherit(LT.Defns.Tools.BaseTool,
         //var sceneManager = diContainer.resolve("SceneManager");
         var composedScene = sceneManager.getCurrentScene();
         this.potreeTool = new Potree.ProfileTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer);
+    }
+);
+
+LT.Defns.Tools.VolumeTool = LT.Helpers.Classes.inherit(LT.Defns.Tools.BaseTool,
+    {
+        potreeTool:null,
+        sceneManager:null,
+        update: function(){
+            var clipBoxes = [];
+
+            for(var i = 0; i < this.potreeTool.volumes.length; i++){
+                var volume = this.potreeTool.volumes[i];
+
+                if(volume.clip){
+                    volume.updateMatrixWorld();
+                    var boxInverse = new THREE.Matrix4().getInverse(volume.matrixWorld);
+
+                    clipBoxes.push(boxInverse);
+                }
+            }
+
+            this.sceneManager.addClipBoxes(clipBoxes);
+        }
+    },
+    function(sceneManager){
+        this.sceneManager = sceneManager;
+        //var sceneManager = diContainer.resolve("SceneManager");
+        var composedScene = sceneManager.getCurrentScene();
+        this.potreeTool = new Potree.VolumeTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer);
     }
 );
 
@@ -700,40 +733,6 @@ LT.Defns.Tools.ToolManager = LT.Helpers.Classes.create({
             tool.update();
         }
 
-
-        // I have to move these things.
-        //  I have to look at making the scene manager and its components transparent to tools.
-        // this way any future effects can be mitigated.
-        // also I may need to create my own tools wrapper.
-        // this will allow me to extend with NON-potree tools.
-        // big bada boom.
-        var clipBoxes = [];
-
-        for(var i = 0; i < profileTool.profiles.length; i++){
-            var profile = profileTool.profiles[i];
-
-            for(var j = 0; j < profile.boxes.length; j++){
-                var box = profile.boxes[j];
-                box.updateMatrixWorld();
-                var boxInverse = new THREE.Matrix4().getInverse(box.matrixWorld);
-                clipBoxes.push(boxInverse);
-            }
-        }
-
-        for(var i = 0; i < volumeTool.volumes.length; i++){
-            var volume = volumeTool.volumes[i];
-
-            if(volume.clip){
-                volume.updateMatrixWorld();
-                var boxInverse = new THREE.Matrix4().getInverse(volume.matrixWorld);
-
-                clipBoxes.push(boxInverse);
-            }
-        }
-
-        if(pointcloud){
-            pointcloud.material.setClipBoxes(clipBoxes);
-        }
     }
 },function(diContainer){});
 
@@ -742,8 +741,8 @@ LT.Defns.Tools.LT_MainViewerToolManager = LT.Helpers.Classes.inherit(LT.Defns.To
         var sceneManager = diContainer.resolve("SceneManager");
         var composedScene = sceneManager.getCurrentScene();
 
-        this.addPostRenderTool("Profile Tool",diContainer.resolve(["SceneManager"],LT.Defns.Tools.ProfileTool));//(diContainer));
-        this.addPostRenderTool("Volume Tool", new Potree.VolumeTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
+        this.addPostRenderTool("Profile Tool",diContainer.resolve(["SceneManager"],LT.Defns.Tools.ProfileTool));
+        this.addPostRenderTool("Volume Tool", diContainer.resolve(["SceneManager"],LT.Defns.Tools.VolumeTool));
         this.addPostRenderNoDepthTool("Measuring Tool", new Potree.MeasuringTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
         this.addPostRenderNoDepthTool("Transformation Tool", new Potree.TransformationTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
     }
@@ -1237,8 +1236,6 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
     initialise: function(setup){
         this.diContainer = new LT.DI.Injector();
 
-
-
         this.loadingProgress = this._initProgressTracker(setup.progress.element, setup.progress.bar);
         this.clock = new THREE.Clock();
         this.settings = setup;
@@ -1276,6 +1273,22 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
         this.objectLoader.update();
         this.sceneManager.postUpdate();
 
+    },
+    run:function(){
+        requestAnimationFrame(this.run);
+
+        this.update();
+
+        if(this.settings.sceneProperties.useEDL){
+            this.sceneManager.setActiveProcessor("EDL");
+        }else if(this.settings.sceneProperties.quality === "Splats"){
+            this.sceneManager.setActiveProcessor("HighQuality");
+
+        }else{
+            this.sceneManager.setActiveProcessor("Default");
+        }
+
+        this.sceneManager.render();
     }
 });
 
@@ -1707,7 +1720,7 @@ LT.Initialise = function (setup){
         //transformationTool.update();
         //profileTool.update();
 
-
+/*
         var clipBoxes = [];
 
         for(var i = 0; i < profileTool.profiles.length; i++){
@@ -1734,13 +1747,13 @@ LT.Initialise = function (setup){
 
         if(pointcloud){
             pointcloud.material.setClipBoxes(clipBoxes);
-        }
+        }*/
     }
-
+/*
     function loop() {
         requestAnimationFrame(loop);
 
-        update();
+        LT.update();
 
         if(sceneProperties.useEDL){
             if(!edlRenderer){
@@ -1758,6 +1771,10 @@ LT.Initialise = function (setup){
     };
 
     initThree();
-    loop();
+    loop();*/
 }
 LT.Initialise(new LT.Defns.DefaultSetup());
+LT.Run = function(){
+    LT.Instances.Engine.Run();
+}
+LT.Run();
