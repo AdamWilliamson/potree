@@ -1,19 +1,108 @@
+
 var LT = LT || new function(){};
 
 
-/*
- Dependancy Injection Service for classes
- */
+//
+ //Dependancy Injection Service for classes
+ //
 LT.DI = {}
-/*
-Usage:
- LT.DI.Injector.register("Beer", {
-    resolve: Beer,
-    requires:["Hops","Malt"],
-    scope: "Instance",
-    defaults:{"default", "values", "constructor", "would normally require", "but addded", "after requires"]
- });
- */
+
+
+//
+ //Generic Class helpers for ECMAScript < 6;
+ //
+LT.Helpers = {};
+LT.Helpers.Classes = {};
+LT.Helpers.Classes.create = function (self,constructor){
+    constructor = constructor || function(){}
+    self = self || {};
+
+    var selfObject= {};
+    //selfObject.prototype = Object.create({});
+
+    for(var k in self) {
+        selfObject[k]=self[k];
+    }
+
+    var child = function(){
+        constructor.call(selfObject, ...arguments);
+    }
+
+    child.prototype = Object.create(selfObject);
+    child.prototype.constructor = child;
+
+    return child;
+}
+LT.Helpers.Classes.inherit = function (parent, self,constructor, ignoreConstructor){
+    constructor = constructor || function(){}
+    parent = parent || function(){};
+    self = self || {};
+    ignoreConstructor = ignoreConstructor || false;
+
+    var selfObject = function(){};
+    selfObject.prototype = Object.create(parent.prototype);
+
+    if (parent.length > constructor.length && !ignoreConstructor){
+        console.log("Invalid constructor semantics " + parent.length + ": " + constructor.length);
+        return;
+    }
+
+    for(var k in self) {
+        selfObject.prototype[k]=self[k];
+    }
+
+    var child = function(){
+        parent.call(this,...arguments);
+        constructor.call(this,...arguments);
+    }
+    child.prototype = Object.create(selfObject.prototype);
+    child.prototype.constructor = child;
+
+    return child;
+}
+
+    console.log("============================================================TESTS===============================================")
+var definition = LT.Helpers.Classes.create({
+    something: 5,
+    testfunction : function(){console.log("================================================================test");}
+},function(){
+    //this.something = 6;
+    console.log("Parent");
+    this.testfunction();
+});
+
+var realdef = new definition();
+realdef.testfunction();
+
+var child = LT.Helpers.Classes.inherit(definition,{},function(){
+    console.log("CHILD");
+    console.log(this.something);
+    this.something = 7;
+    console.log(this.something);
+    console.log("CONSTRUCTING CHILD");
+    console.dir( this);
+    this.testfunction();
+})
+
+var obj = function(){}
+var real = new obj();
+
+console.log(child);
+var sister = new child();
+console.log("DONE");
+console.log("============================================================END TESTS===============================================")
+
+// END
+
+//
+//Usage:
+ //LT.DI.Injector.register("Beer", {
+//    resolve: Beer,
+//    requires:["Hops","Malt"],
+//    scope: "Instance",
+//    defaults:{"default", "values", "constructor", "would normally require", "but addded", "after requires"]
+// });
+ //
 //TODO: Refactor to use _resolvee and _lookup in the main resolve function completely. It doesn't do it right yet.
 LT.DI.Injector = LT.Helpers.Classes.create({
     dependencies: [],
@@ -28,10 +117,13 @@ LT.DI.Injector = LT.Helpers.Classes.create({
         }
     },
     _resolve:function(d){
-        var params =[d.resolve];
-        var resolved = [];
-        if (d.requires && d.requires.length > 0){
 
+        var params =[];
+        var resolved = [];
+
+        if (d.object){ return d.object;}
+
+        if (d.requires && d.requires.length > 0){
 
             for( var reqItem in d.requires)
             {
@@ -45,13 +137,20 @@ LT.DI.Injector = LT.Helpers.Classes.create({
             params = params.concat(resolved);
         }
 
-        return new (Function.prototype.bind.apply(d.resolve,params.concat(d.defaults)));
+        // d.resolve is a function, looks undefined but isn.t
+        // bind.apply mightnot be the correct way to do this.
+        var inst = Object.create(d.resolve.prototype);
+        //return new d.resolve.call(params.concat(d.defaults));
+        var ret = d.resolve.apply(inst, params.concat(d.defaults))
+        return Object(ret) === ret ? ret : inst;
     },
     resolve: function() {
         if(arguments.length > 0 &&  Object.prototype.toString.call( arguments[0]) === '[object Array]' ){
+
+            var reso = arguments[1];
             return this._resolve({
                 requires: arguments[0],
-                resolve: arguments[1],
+                resolve: reso,
                 scope: "Instance"
             });
         }
@@ -96,68 +195,8 @@ LT.DI.Injector = LT.Helpers.Classes.create({
     }
 });
 
-// Goals:
-/*
-var Beer = function(x,y,z){}
-LT.DI.Injector.register("Beer", ["Hops", "Ginger", Beer]).AsSingleton();
-LT.DI.Injector.register(["Hops", Ginger"]).As(Beer)
-LT.DI.Injector.register("Beer", {
-    require:["Hops","Ginger"],
-    resolve: Beer,
-    scope: "Instance"
-});
-LT.DI.Injector.resolve("Beer");
-var carlton = LT.DI.Injector.resolve("Beer", function(b){
-});
-carlton("Carlton");
- */
 
-/*
-Generic Class helpers for ECMAScript < 6;
- */
-LT.Helpers = {};
-LT.Helpers.Classes = {};
-LT.Helpers.Classes.create = function (self,constructor){
-    constructor = constructor || function(){}
-    self = self || {};
 
-    var selfObject= function(){}
-    selfObject.prototype = Object.create({});
-
-    for(var k in self) selfObject[k]=self[k];
-
-    var child = function(args){
-        constructor.call(this, ...arguments);
-    }
-    child.prototype = Object.create(selfObject);
-    child.prototype.constructor = constructor;
-
-    return child;
-}
-LT.Helpers.Classes.inherit = function (parent, self,constructor, ignoreConstructor){
-    constructor = constructor || function(){}
-    parent = parent || function(){};
-    self = self || {};
-    ignoreConstructor = ignoreConstructor || false;
-
-    var selfObject = function(){}
-    selfObject.prototype = Object.create(parent.prototype);
-    if (parent.length > constructor.length && !ignoreConstructor){
-        return;
-    }
-
-    for(var k in self) selfObject[k]=self[k];
-
-    var child = function(arg){
-        parent.call(this,...arguments);
-        constructor.call(this,...arguments);
-    }
-    child.prototype = Object.create(selfObject);
-    child.prototype.constructor = constructor;
-
-    return child;
-}
-/* END */
 
 LT.Defns = {};
 
@@ -178,86 +217,110 @@ LT.Defns.Scene.ComposedScene = LT.Helpers.Classes.create({
     lights:[]
 },
 function(width, height){
+    console.log("Setting width, height:" + width + ", " + height);
     var aspect = width / height;
     var near = 0.1;
     var far = 1000*1000;
+    var fov = 75;
 
     this.scene = new THREE.Scene();
     this.scenePointCloud = new THREE.Scene();
-    this.sceneBG = new THREE.Scene();
+    //this.sceneBG = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    this.cameraBG = new THREE.Camera();
-    this.camera.rotation.order = 'ZYX';
+    this.camera.position.z = 1800;
+    //this.cameraBG = new THREE.Camera();
+    //this.camera.rotation.order = 'ZYX';
     this.renderer = new THREE.WebGLRenderer();
     this.renderer.setSize(width, height);
     this.renderer.autoClear = false;
-    this.skybox = Potree.utils.loadSkybox("../resources/textures/skybox/");
+    //this.skybox = Potree.utils.loadSkybox("../resources/textures/skybox/");
 
-    var texture = Potree.utils.createBackgroundTexture(512, 512);
+    //var texture = Potree.utils.createBackgroundTexture(512, 512);
 
-    texture.minFilter = texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = texture.magFilter = THREE.LinearFilter;
+    //texture.minFilter = texture.magFilter = THREE.NearestFilter;
+    //texture.minFilter = texture.magFilter = THREE.LinearFilter;
 
-    var bg = new THREE.Mesh(
-        new THREE.PlaneBufferGeometry(2, 2, 0),
-        new THREE.MeshBasicMaterial({
-            map: texture
-        })
-    );
+    //var bg = new THREE.Mesh(
+//        new THREE.PlaneBufferGeometry(2, 2, 0),
+//        new THREE.MeshBasicMaterial({
+//            map: texture
+//        })
+//    );
     //bg.position.z = -1;
-    bg.material.depthTest = false;
-    bg.material.depthWrite = false;
-    this.sceneBG.add(bg);
+//    bg.material.depthTest = false;
+//    bg.material.depthWrite = false;
+//    this.sceneBG.add(bg);
+});
+
+LT.Defns.Scene.AdditiveRenderer = LT.Helpers.Classes.create({
+    render:function(){},
+    render_PostDepthClear:function(){}
 });
 
 LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
     {
-        renderLocation: null,
         //renderer: null,
         activeProcessor: null,
         //camera: null,
-        toolManager: null,
         scenePointCloud: null,
         composedScene:null,
         processors:[],
         intensityMax:null,
         freeze:false,
         clipBoxes:[],
+        showSkyBox: false,
+        additiveRenderers: [],
+        diContainer:null,
+        sceneProperties:null,
+        addAdditionalRenderer: function(renderer){
+            this.additiveRenderers.push(renderer);
+        },
         render: function(){
             // Resize as needed.
-            var width = this.renderLocation.clientWidth;
-            var height = this.renderLocation.clientHeight;
-            var aspect = width / height;
+            //var width = this.renderLocation.clientWidth;
+            //var height = this.renderLocation.clientHeight;
+            //var aspect = width / height;
 
+            //this.composedScene.camera.position.set( 0, 200, 800 );
+
+            this.composedScene.renderer.setClearColor( this.sceneProperties.bgColor );
             this.composedScene.renderer.clear();
 
-            this.composedScene.camera.aspect = aspect;
-            this.composedScene.camera.updateProjectionMatrix();
+            //this.composedScene.camera.aspect = aspect;
+            //this.composedScene.camera.updateProjectionMatrix();
 
-            this.composedScene.renderer.setSize(width, height);
-            this.activeProcessor.resize(width,height);
+            //this.composedScene.renderer.setSize(width, height);
+            //this.activeProcessor.resize(width,height);
 
-            if(showSkybox && this.composedScene.skybox){
-                this.composedScene.skybox.camera.rotation.copy(this.composedScene.camera.rotation);
-                this.composedScene.renderer.render(this.composedScene.skybox.scene, this.composedScene.skybox.camera);
-            }else{
-                this.composedScene.renderer.render(this.composedScene.sceneBG, this.composedScene.cameraBG);
-            }
+            //if(this.showSkybox && this.composedScene.skybox){
+                //this.composedScene.skybox.camera.rotation.copy(this.composedScene.camera.rotation);
+                //this.composedScene.renderer.render(this.composedScene.skybox.scene, this.composedScene.skybox.camera);
+            //}else{
+//                this.composedScene.renderer.render(this.composedScene.sceneBG, this.composedScene.cameraBG);
+//            }
 
-            this.activeProcessor.render(this.composedScene, this.renderer);
+            //this.activeProcessor.render(this.composedScene, this.renderer);
             //this.processor.render(this.composedScene, this.renderer);
+            //console.log("Rednering: " + this.composedScene.scene + " " + this.composedScene.camera);
             this.composedScene.renderer.render(this.composedScene.scene, this.composedScene.camera);
-            this.composedScene.renderer.render(this.composedScene.scenePointCloud, this.composedScene.camera);
-            this.toolManager.postRender();
+            //this.composedScene.renderer.render(this.composedScene.scenePointCloud, this.composedScene.camera);
+            /*
+            for(var i in this.additiveRenderers){
+                this.additiveRenderers[i].render();
+            }
+            //this.toolManager.postRender();
             this.composedScene.renderer.clearDepth();
-            this.toolManager.postRenderNoDepth();
+            //this.toolManager.postRenderNoDepth();
+            for(var i in this.additiveRenderers){
+                this.additiveRenderers[i].render_PostDepthClear();
+            }*/
         },
         addToScene: function(object){
             this.composedScene.scene.add(object);
         },
         addLight: function(light){
             this.composedScene.lights.push(light);
-            this.composedScene.scenePointCloud.add( light );
+            this.composedScene.scene.add( light );
         },
         addProcessor:function(name, processor){
             this.processors[name] = processor;
@@ -270,6 +333,7 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             this.clipBoxes = this.clipBoxes.concat(clipBoxes);
         },
         update: function(){
+            return;
             this.clipBoxes = [];
             if(this.composedScene.pointcloud){
                 if(!this.intensityMax){
@@ -317,19 +381,16 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             }
         },
         postUpdate:function(){
+            return;
             if(this.composedScene.pointcloud){
                 this.composedScene.pointcloud.material.setClipBoxes(this.clipBoxes);
             }
         }
     },
-    function( renderLocation, composedScene, processor, toolManager){
-        if (!renderLocation) throw "Not setup correctly, render location required";
-        if (!processor)throw "Not setup correctly, processor required";
-
-        this.renderLocation = renderLocation;
-        this.processor = processor;
-        this.composedScene = new LT.Defns.Scene.ComposedScene();
-        this.toolManager = toolManager;
+    function( sceneProperties, diContainer,composedScene){
+        this.sceneProperties = sceneProperties;
+        this.diContainer = diContainer;
+        this.composedScene = composedScene;// new LT.Defns.Scene.ComposedScene();
     }
 );
 
@@ -370,20 +431,20 @@ LT.Defns.Scene.EDLProcessor = LT.Helpers.Classes.inherit(LT.Defns.Scene.ScenePro
         rtColor : null,
     //var gl = renderer.context;
         resize: function(width, height){
-            var needsResize = (rtColor.width != width || rtColor.height != height);
+            var needsResize = (this.rtColor.width != width || this.rtColor.height != height);
 
             // disposal will be unnecessary once this fix made it into three.js master:
             // https://github.com/mrdoob/three.js/pull/6355
             if(needsResize){
-                rtColor.dispose();
+                this.rtColor.dispose();
             }
 
-            rtColor.setSize(width, height);
+            this.rtColor.setSize(width, height);
         },
 
         render: function(composedScene, renderer){
 
-            if(pointcloud){
+            if(composedScene.pointcloud){
                 var octreeSize = composedScene.pointcloud.pcoGeometry.boundingBox.size().x;
 
                 composedScene.pointcloud.visiblePointsTarget = pointCountTarget * 1000 * 1000;
@@ -419,10 +480,10 @@ LT.Defns.Scene.EDLProcessor = LT.Helpers.Classes.inherit(LT.Defns.Scene.ScenePro
                 { // EDL OCCLUSION PASS
                     this.edlMaterial.uniforms.screenWidth.value = width;
                     this.edlMaterial.uniforms.screenHeight.value = height;
-                    this.edlMaterial.uniforms.near.value = camera.near;
-                    this.edlMaterial.uniforms.far.value = camera.far;
-                    this.edlMaterial.uniforms.colorMap.value = rtColor;
-                    this.edlMaterial.uniforms.expScale.value = camera.far;
+                    this.edlMaterial.uniforms.near.value = composedScene.camera.near;
+                    this.edlMaterial.uniforms.far.value = composedScene.camera.far;
+                    this.edlMaterial.uniforms.colorMap.value = this.rtColor;
+                    this.edlMaterial.uniforms.expScale.value = composedScene.camera.far;
 
                     //edlMaterial.uniforms.depthMap.value = depthTexture;
 
@@ -588,8 +649,8 @@ function(){
     } );
 
     var uniformsNormalize = {
-        depthMap: { type: "t", value: rtDepth },
-        texture: { type: "t", value: rtNormalize }
+        depthMap: { type: "t", value: this.rtDepth },
+        texture: { type: "t", value: this.rtNormalize }
     };
 
     this.normalizationMaterial = new THREE.ShaderMaterial({
@@ -664,6 +725,7 @@ LT.Defns.Tools.ProfileTool = LT.Helpers.Classes.inherit(LT.Defns.Tools.BaseTool,
         }
     },
     function(sceneManager){
+
         this.sceneManager = sceneManager;
         //var sceneManager = diContainer.resolve("SceneManager");
         var composedScene = sceneManager.getCurrentScene();
@@ -700,7 +762,7 @@ LT.Defns.Tools.VolumeTool = LT.Helpers.Classes.inherit(LT.Defns.Tools.BaseTool,
     }
 );
 
-LT.Defns.Tools.ToolManager = LT.Helpers.Classes.create({
+LT.Defns.Tools.ToolManager = LT.Helpers.Classes.inherit(LT.Defns.Scene.AdditiveRenderer,{
     postRenderTools:[],
     postRenderNoDepthTools:[],
 
@@ -713,24 +775,24 @@ LT.Defns.Tools.ToolManager = LT.Helpers.Classes.create({
     get: function(name){
         return this.postRenderTools[name] || this.postRenderNoDepthTools[name];
     },
-    postRender: function(){
+    render: function(){
         for(var t in this.postRenderTools)
         {
-            t.render();
+            if (t.render)t.render();
         }
     },
-    postRenderNoDepth: function(){
+    render_PostDepthClear: function(){
         for(var t in this.postRenderNoDepthTools)
         {
-            t.render();
+            if (t.render)            t.render();
         }
     },
     update:function(){
         for (var tool in this.postRenderTools){
-            tool.update();
+            if (tool.update) tool.update();
         }
         for (var tool in this.postRenderNoDepthTools){
-            tool.update();
+            if (tool.update) tool.update();
         }
 
     }
@@ -741,10 +803,10 @@ LT.Defns.Tools.LT_MainViewerToolManager = LT.Helpers.Classes.inherit(LT.Defns.To
         var sceneManager = diContainer.resolve("SceneManager");
         var composedScene = sceneManager.getCurrentScene();
 
-        this.addPostRenderTool("Profile Tool",diContainer.resolve(["SceneManager"],LT.Defns.Tools.ProfileTool));
-        this.addPostRenderTool("Volume Tool", diContainer.resolve(["SceneManager"],LT.Defns.Tools.VolumeTool));
-        this.addPostRenderNoDepthTool("Measuring Tool", new Potree.MeasuringTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
-        this.addPostRenderNoDepthTool("Transformation Tool", new Potree.TransformationTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
+        this.addPostRender("Profile Tool",diContainer.resolve(["SceneManager"],LT.Defns.Tools.ProfileTool));
+        this.addPostRender("Volume Tool", diContainer.resolve(["SceneManager"],LT.Defns.Tools.VolumeTool));
+        this.addPostRenderNoDepth("Measuring Tool", new Potree.MeasuringTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
+        this.addPostRenderNoDepth("Transformation Tool", new Potree.TransformationTool(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer));
     }
 );
 
@@ -786,11 +848,11 @@ LT.Defns.Controls.ControlsManager = LT.Helpers.Classes.create(
     }
 );
 
-LT.Defns.Controls.ControlsManager.LT_MainViewerControlsManager = LT.Helpers.Classes.inherit(LT.Defns.Controls.ControlsManager,
+LT.Defns.Controls.LT_MainViewerControlsManager = LT.Helpers.Classes.inherit(LT.Defns.Controls.ControlsManager,
     {
         onKeyDown:function(event){
             function onKeyDown(event){
-                //console.log(event.keyCode);
+
 
                 if(event.keyCode === 69){
                     // e pressed
@@ -854,7 +916,7 @@ LT.Defns.Controls.EarthControlScheme = LT.Helpers.Classes.inherit(LT.Defns.Contr
     controls: null,
     enable: function(){ this.controls.enabled = true; },
     disable: function(){ this.controls.enabled = false; },
-    update: function(delta){ controls.update(delta); }
+    update: function(delta){ this.controls.update(delta); }
     },
     function(camera, renderer, pointcloud, useDEMCollisions){
         // camera and controls
@@ -862,7 +924,7 @@ LT.Defns.Controls.EarthControlScheme = LT.Helpers.Classes.inherit(LT.Defns.Contr
         camera.rotation.y = -Math.PI / 4;
         camera.rotation.x = -Math.PI / 6;
         //useOrbitControls();
-        this.controls = new THREE.EarthControls(camera, renderer, scenePointCloud);
+        this.controls = new THREE.EarthControls(camera, renderer, pointcloud);
         this.controls.addEventListener("proposeTransform", function(event){
             if(!pointcloud || !useDEMCollisions){
                 return;
@@ -885,7 +947,7 @@ LT.Defns.Controls.OrbitControlScheme = LT.Helpers.Classes.inherit(LT.Defns.Contr
     },
     function(camera, renderer, pointcloud, useDEMCollisions){
         this.controls = new Potree.OrbitControls(camera, renderer.domElement);
-        this.controlsorbitControls.addEventListener("proposeTransform", function(event){
+        this.controls.addEventListener("proposeTransform", function(event){
             if(!pointcloud || !useDEMCollisions){
                 return;
             }
@@ -902,7 +964,7 @@ LT.Defns.Controls.OrbitControlScheme = LT.Helpers.Classes.inherit(LT.Defns.Contr
         });
 
         if(pointcloud){
-            controls.target.copy(pointcloud.boundingSphere.center.clone().applyMatrix4(pointcloud.matrixWorld));
+            this.controls.target.copy(pointcloud.boundingSphere.center.clone().applyMatrix4(pointcloud.matrixWorld));
         }
     }
 );
@@ -918,74 +980,38 @@ LT.Defns.Loaders.PointClouds.BaseSetup = LT.Helpers.Classes.create({
 LT.Defns.Loaders.PointClouds.PotreeDefault = LT.Helpers.Classes.inherit(LT.Defns.Loaders.PointClouds.BaseSetup,{
     isFlipYZ: false,
     referenceFrame: null,
-    isCompatiblePath:function(path){ path.indexOf("cloud.js") > 0; },
-    initialise: function(path, composedScene){scenePointCloud
-        this.referenceFrame = new THREE.Object3D();
-        composedScene.scenePointCloud.add(referenceFrame);
+    isCompatiblePath:function(path){
 
-        Potree.POCLoader.load(pointcloudPath, function(geometry){
-            composedScene.pointcloud = new Potree.PointCloudOctree(geometry);
-
-            pointcloud.material.pointSizeType = Potree.PointSizeType.ADAPTIVE;
-            pointcloud.material.size = pointSize;
-            pointcloud.visiblePointsTarget = pointCountTarget * 1000 * 1000;
-
-            this.referenceFrame.add(pointcloud);
-
-            this.referenceFrame.updateMatrixWorld(true);
-            var sg = pointcloud.boundingSphere.clone().applyMatrix4(pointcloud.matrixWorld);
-
-            this.referenceFrame.position.copy(sg.center).multiplyScalar(-1);
-            this.referenceFrame.updateMatrixWorld(true);
-
-            if(sg.radius > 50*1000){
-                camera.near = 10;
-            }else if(sg.radius > 10*1000){
-                camera.near = 2;
-            }else if(sg.radius > 1000){
-                camera.near = 1;
-            }else if(sg.radius > 100){
-                camera.near = 0.5;
-            }else{
-                camera.near = 0.1;
-            }
-
-            this.flipYZ();
-            camera.zoomTo(pointcloud, 1);
-
-            initGUI();
-
-            earthControls.pointclouds.push(pointcloud);
-
-            if(sceneProperties.navigation === "Earth"){
-                useEarthControls();
-            }else if(sceneProperties.navigation === "Orbit"){
-                useOrbitControls();
-            }else if(sceneProperties.navigation === "Flight"){
-                useFPSControls();
-            }else{
-                console.warning("No navigation mode specified. Using OrbitControls");
-                useOrbitControls();
-            }
-
-            if(sceneProperties.cameraPosition != null){
-                var cp = new THREE.Vector3(sceneProperties.cameraPosition[0], sceneProperties.cameraPosition[1], sceneProperties.cameraPosition[2]);
-                camera.position.copy(cp);
-            }
-
-            if(sceneProperties.cameraTarget != null){
-                var ct = new THREE.Vector3(sceneProperties.cameraTarget[0], sceneProperties.cameraTarget[1], sceneProperties.cameraTarget[2]);
-                camera.lookAt(ct);
-
-                if(sceneProperties.navigation === "Orbit"){
-                    controls.target.copy(ct);
-                }
-            }
-
-        });
-        return pointcloud;
+        return path.indexOf("cloud.js") > 0;
     },
-    flipYZ: function (){
+    initialise: function(path, composedScene, settings){
+
+        this.referenceFrame = new THREE.Object3D();
+        composedScene.scenePointCloud.add(this.referenceFrame);
+        var self = this;
+        return new Promise(function(resolve,reject){
+            Potree.POCLoader.load(path, function(geometry){
+
+                composedScene.pointcloud = new Potree.PointCloudOctree(geometry);
+
+                composedScene.pointcloud.material.pointSizeType = settings.getPointSizeType();//Potree.PointSizeType.ADAPTIVE;
+                composedScene.pointcloud.material.size = settings.pointSize;//pointSize;
+                composedScene.pointcloud.visiblePointsTarget = settings.pointCountTarget * 1000 * 1000;
+
+                self.referenceFrame.add(composedScene.pointcloud);
+
+                self.referenceFrame.updateMatrixWorld(true);
+                var sg = composedScene.pointcloud.boundingSphere.clone().applyMatrix4(composedScene.pointcloud.matrixWorld);
+
+                self.referenceFrame.position.copy(sg.center).multiplyScalar(-1);
+                self.referenceFrame.updateMatrixWorld(true);
+
+                resolve();
+            })
+        });
+        //return promise;//composedScene.pointcloud;
+    },
+    flipYZ: function (pointcloud){
         this.isFlipYZ = !this.isFlipYZ;
 
         if(this.isFlipYZ){
@@ -1019,6 +1045,7 @@ LT.Defns.Loaders.PointClouds.PotreeDefault = LT.Helpers.Classes.inherit(LT.Defns
 
 LT.Defns.Loaders.PointClouds.Arena4DSetup = LT.Helpers.Classes.inherit(LT.Defns.Loaders.PointClouds.BaseSetup, {
     isCompatiblePath:function (path){
+
         return path.indexOf(".vpc") > 0;
     },
 
@@ -1088,19 +1115,31 @@ LT.Defns.Loaders.ObjectLoader = LT.Helpers.Classes.create(
         loadingProgress:null,
         _loadedPointClouds:[],
         addPointCloudLoader: function (loader){
+
+
             this.pointCloudLoaders.push(loader);
         },
-        loadPointCloud: function (path, composedScene){
-            for(var s in this.setups){
-                if (s.isCompatiblePath(path)){
-                    s.initialise(path,composedScene);
-                    this._loadedPointClouds.push(composedScene.pointcloud);
-                    return;
+        loadPointCloud: function (path, composedScene, setup){
+            for(var s in this.pointCloudLoaders){
+
+                var result = this.pointCloudLoaders[s].isCompatiblePath(path);
+
+                if ( result)
+                {
+
+                    var promise = this.pointCloudLoaders[s].initialise(path,composedScene, setup);
+                    var self = this;
+                    promise.then(function(){
+                        self._loadedPointClouds.push(composedScene.pointcloud);
+                    });
+
+                    return promise;
                 }
             }
+            return Promise.reject();
         },
         update:function(){
-            if(this._loadedPointClouds.length > 0) {
+            if(this.loadingProgress && this._loadedPointClouds.length > 0) {
                 var progress = 0;
                 for(var pc in this._loadedPointClouds) {
                     progress += pc.progress;
@@ -1118,8 +1157,8 @@ LT.Defns.Loaders.ObjectLoader = LT.Helpers.Classes.create(
 
 LT.Defns.Loaders.LT_MainObjectLoader = LT.Helpers.Classes.inherit(LT.Defns.Loaders.ObjectLoader, {},
     function(){
-    this.addPointCloudLoader(new LT.Defns.Loaders.PotreeDefault());
-    this.addPointCloudLoader(new LT.Defns.Loaders.Arena4DSetup());
+    this.addPointCloudLoader(new LT.Defns.Loaders.PointClouds.PotreeDefault());
+    this.addPointCloudLoader(new LT.Defns.Loaders.PointClouds.Arena4DSetup());
 });
 
 //======================================================================================================================
@@ -1165,9 +1204,11 @@ LT.Defns.DefaultSetup = LT.Helpers.Classes.create({
         mobileNavigation: "Orbit",
         pointSize: 		1.2,
         useEDL:			true,				// eye-dome-lighting, especially usefull for point clouds without normals
+        bgColor: "#AAAA00"
     },
     sceneObjects:{
-        potreePointCloud:"../resources/pointclouds/lion_takanawa/cloud.js"
+        potreePointCloud:null,//"../resources/pointclouds/lion_takanawa/cloud.js"
+        nativeGeoms:["Sphere"]
     },
     controlProperties:{
         useDEMCollisions: false,
@@ -1227,58 +1268,75 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
     settings: null,
     loadingProgress: null,
     diContainer:null,
-    _initSceneManager:function(loadingProgress){ return new LT.Defns.Scene.SceneManager(loadingProgress);},
+    _initSceneManager:function(loadingProgress){ return new LT.Defns.Scene.SceneManager(this.settings.sceneProperties,this.diContainer,this.composedScene);},
     _initControlManager:function(){ return new LT.Defns.Controls.ControlsManager();},
-    _initObjectLoader:function(){ return new LT.Defns.Loaders.ObjectLoader();},
+    _initObjectLoader:function(){ return new LT.Defns.Loaders.ObjectLoader(this.loadingProgress);},
     _initComposedScene:function(width,height){ return new LT.Defns.Scene.ComposedScene(width,height);},
-    _initToolsManager:function(){ return new LT.Defns.Tools.ToolManager(this.diContainer); },
+    _initToolsManager:function(diContainer){ return new LT.Defns.Tools.ToolManager(this.diContainer); },
     _initProgressTracker:function(element, bar){ return new LT.Defns.ProgressTracker(element, bar);},
     initialise: function(setup){
         this.diContainer = new LT.DI.Injector();
 
-        this.loadingProgress = this._initProgressTracker(setup.progress.element, setup.progress.bar);
-        this.clock = new THREE.Clock();
+        //this.loadingProgress = this._initProgressTracker(setup.progress.element, setup.progress.bar);
+        //this.clock = new THREE.Clock();
         this.settings = setup;
         var renderLocation = setup.getRenderArea();
 
-        this.composedScene = this._initComposedScene(renderLocation.width, renderLocation.height);
-        renderLocation.appendChild(composedScene.renderer.domElement);
+        this.composedScene = this._initComposedScene(window.innerWidth, window.innerHeight);
+        console.log(renderLocation);
+        console.log(this.composedScene.renderer);
+        renderLocation.appendChild(this.composedScene.renderer.domElement);
 
-        this.objectLoader = this._initObjectLoader();
-        this.diContainer.register("ObjectLoader",{ object:this.objectLoader, scope:"Singleton" });
+        //this.objectLoader = this._initObjectLoader();
+        //this.diContainer.register("ObjectLoader",{ object:this.objectLoader, scope:"Singleton" });
 
-        this.sceneManager = this._initSceneManager(this.loadingProgress);
+        this.sceneManager = this._initSceneManager();
         this.diContainer.register("SceneManager",{ object:this.sceneManager, scope:"Singleton" });
 
+        var self = this;
+        var promise;
 
-        this.toolsManager = this._initToolsManager();
-        this.controlsManager = this._initControlManager();
+        //if (setup.sceneObjects && setup.sceneObjects.potreePointCloud)
+        //{
+//            promise = this.objectLoader.loadPointCloud(setup.sceneObjects.potreePointCloud, this.composedScene, setup);
+//
+  //      }
+//        else{
+            promise = Promise.resolve();
+//        }
+        promise.catch(function(){
+            throw "Error loading pointcloud";
+        });
+        promise.then(function(){
 
 
-        if (setup.sceneObjects && setup.sceneObjects.potreePointCloud) {
-            this.composedScene.pointcloud = this.objectLoader.loadPointCloud(setup.sceneObjects.potreePointCloud, this.composedScene);
-        }
+
+            //self.toolsManager = self._initToolsManager(self.diContainer);
+            //self.controlsManager = self._initControlManager();
+            //self.sceneManager.addAdditionalRenderer(self.toolsManager);
+        });
+        return promise;
     },
     update:function(){
+        //console.log("Updating");
         Potree.pointLoadLimit = this.settings.sceneProperties.pointLimit * 2 * 1000 * 1000;// To millions.
         this.sceneManager.update();
         //scene camera
         // Pass into SceneManager, the scene proeprties.. DUH!
-        this.composedScene.camera.fov = this.settings.sceneProperties.fov;
+        //this.composedScene.camera.fov = this.settings.sceneProperties.fov;
         //controls.update
-        this.controlsManager.update(this.clock.getDelta());
-        this.toolsManager.update();
+        //this.controlsManager.update(this.clock.getDelta());
+        //this.toolsManager.update();
 
 
-        this.objectLoader.update();
+        //this.objectLoader.update();
         this.sceneManager.postUpdate();
 
     },
     run:function(){
-        requestAnimationFrame(this.run);
-
-        this.update();
-
+        console.log("Engine.Run");
+        //this.update();
+/*
         if(this.settings.sceneProperties.useEDL){
             this.sceneManager.setActiveProcessor("EDL");
         }else if(this.settings.sceneProperties.quality === "Splats"){
@@ -1287,8 +1345,10 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
         }else{
             this.sceneManager.setActiveProcessor("Default");
         }
-
+*/
+        //console.log("rendering");
         this.sceneManager.render();
+        requestAnimationFrame(this.run.bind(this));
     }
 });
 
@@ -1296,7 +1356,7 @@ LT.Initialise = function (setup){
     LT.Instances = {};
     if (!(setup instanceof LT.Defns.DefaultSetup)) throw "Setup needs to be an instance of LT.Defns.DefaultSetup";
     LT.ActiveSetup = setup;
-
+/*
     if( /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ) {
         LT.ActiveSetup.sceneProperties.navigation = LT.ActiveSetup.sceneProperties.mobileNavigation || "Orbit";
     }
@@ -1308,53 +1368,53 @@ LT.Initialise = function (setup){
     if(LT.ActiveSetup.sceneProperties.quality === null){
         LT.ActiveSetup.sceneProperties.quality = "Squares";
     }
-
-    var fov = LT.ActiveSetup.sceneProperties.fov;
-    var pointSize = LT.ActiveSetup.sceneProperties.pointSize;
+*/
+    //var fov = LT.ActiveSetup.sceneProperties.fov;
+    //var pointSize = LT.ActiveSetup.sceneProperties.pointSize;
     //var pointCountTarget = LT.ActiveSetup.sceneProperties.pointLimit;
-    var opacity = 1;
-    var pointSizeType = LT.ActiveSetup.getPointSizeType();
-    var pointColorType = LT.ActiveSetup.getMaterial();
+    //var opacity = 1;
+    //var pointSizeType = LT.ActiveSetup.getPointSizeType();
+    //var pointColorType = LT.ActiveSetup.getMaterial();
     //var pointShape = Potree.PointShape.SQUARE;
-    var clipMode = Potree.ClipMode.HIGHLIGHT_INSIDE;
-    var quality = LT.ActiveSetup.getQuality();
-    var isFlipYZ = false;
+    //var clipMode = Potree.ClipMode.HIGHLIGHT_INSIDE;
+    //var quality = LT.ActiveSetup.getQuality();
+    //var isFlipYZ = false;
     //var useDEMCollisions = false;
-    var minNodeSize = 100;
+    //var minNodeSize = 100;
     //var directionalLight;
 
-    var showStats = false;
-    var showBoundingBox = false;
-    var freeze = false;
+    //var showStats = false;
+    //var showBoundingBox = false;
+    //var freeze = false;
 
     //var fpControls;
     //var orbitControls;
     //var earthControls;
     //var controls;
 
-    var progressBar = new ProgressBar();
+    //var progressBar = new ProgressBar();
 
-    var pointcloudPath = sceneProperties.path;
+    //var pointcloudPath = sceneProperties.path;
 
-    var elRenderArea = document.getElementById(finalSetup.renderArea);
+    //var elRenderArea = document.getElementById(finalSetup.renderArea);
 
-    var gui;
-    var renderer;
-    var camera;
-    var scene;
-    var scenePointCloud;
-    var sceneBG, cameraBG;
-    var pointcloud;
-    var skybox;
-    var stats;
+    //var gui;
+    //var renderer;
+    //var camera;
+    //var scene;
+    //var scenePointCloud;
+    //var sceneBG, cameraBG;
+    //var pointcloud;
+    //var skybox;
+    //var stats;
     //var clock = new THREE.Clock();
-    var showSkybox = false;
-    var measuringTool;
-    var volumeTool;
-    var transformationTool;
+    //var showSkybox = false;
+    //var measuringTool;
+    //va/r volumeTool;
+    //var transformationTool;
     //var referenceFrame;
 
-    function initGUI(){
+    /*function initGUI(){
         // dat.gui
         gui = new dat.GUI({
             //height : 5 * 32 - 1
@@ -1525,14 +1585,14 @@ LT.Initialise = function (setup){
         stats.domElement.style.margin = '5px';
         document.body.appendChild( stats.domElement );
     }
-
+*/
     function initThree(){
         //var width = elRenderArea.clientWidth;
         //var height = elRenderArea.clientHeight;
 
         // Stupid progress bar example, until merged with ember, then wont need this shite.
-        LT.ActiveSetup.progress.element = progressBar.element;
-        LT.ActiveSetup.progress.bar = progressBar.elProgress;
+        //LT.ActiveSetup.progress.element = progressBar.element;
+        //LT.ActiveSetup.progress.bar = progressBar.elProgress;
 
 
         //var composedScene = new LT.Defns.Scene.ComposedScene(width,height);
@@ -1540,7 +1600,7 @@ LT.Initialise = function (setup){
 
 
         LT.Instances.Engine = new LT.Defns.Engine.LTEngine();
-
+/*
         // Dont do this, inherit ya damn idjit.
         LT.Instances.Engine._initControlManager = function(){
             return new LT.Defns.Controls.LT_MainViewerControlsManager(
@@ -1552,11 +1612,8 @@ LT.Initialise = function (setup){
         LT.Instances.Engine._initObjectLoader = function(){
             return new LT.Defns.Loaders.LT_MainObjectLoader();
         }
-        LT.Instances.Engine._initToolsManager = function(){
-            return new LT.Defns.Tools.LT_MainViewerToolManager(
-                this.composedScene.scenePointCloud,
-                this.composedScene.camera,
-                this.composedScene.renderer);
+        LT.Instances.Engine._initToolsManager = function(diContainer){
+            return new LT.Defns.Tools.LT_MainViewerToolManager(diContainer);
         }
         LT.Instances.Engine._initControlManager = function(){
             return new LT.Defns.Controls.LT_MainViewerControlsManager(
@@ -1577,97 +1634,75 @@ LT.Initialise = function (setup){
 
             return sm;
         }
-
-        LT.Instances.Engine.initialise(LT.ActiveSetup)
-
-        var sceneManager = LT.Instances.Engine.sceneManager;
-
-
-        //var toolsManager = new LT.Defns.Tools.LT_MainViewerToolManager(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer);
-        //renderLocation, renderer, processor, camera
-        /*
-        var sceneManager = new LT.Defns.Scene.SceneManager(
-            elRenderArea,
-            composedScene,
-            new LT.Defns.Scene.PotreeSceneProcessor(),
-            toolsManager);
-
-        sceneManager.addProcessor("HQ", new LT.Defns.Scene.HighQualityProcessor());
-        sceneManager.addProcessor("EDL", new LT.Defns.Scene.EDLProcessor());
 */
-        //camera, renderer, pointcloud, useDEMCollisions
-        //var controlManager = new LT.Defns.Controls.LT_MainViewerControlsManager(composedScene.camera, composedScene.renderer, composedScene.pointcloud, useDEMCollisions);
+        return LT.Instances.Engine.initialise(LT.ActiveSetup)
+            .then(function(){
 
-        sceneManager.addToScene(Potree.utils.createGrid(5, 5, 2));
+                var sceneManager = LT.Instances.Engine.sceneManager;
+                light = new THREE.DirectionalLight( 0xffffff );
+                light.position.set( 0, 0, 1 );
+                //scene.add( light );
+                sceneManager.addLight(light);
 
-        var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
-        //directionalLight.position.set( 10, 10, 10 );
-        //directionalLight.lookAt( new THREE.Vector3(0, 0, 0));
+                var faceIndices = [ 'a', 'b', 'c' ];
+                var color, f, f2, f3, p, vertexIndex,
+                    radius = 200,
+                    geometry3 = new THREE.IcosahedronGeometry( radius, 1 );
+                for ( var i = 0; i < geometry3.faces.length; i ++ ) {
 
-        directionalLight.position.copy(composedScene.camera.position);
-        directionalLight.lookAt(new THREE.Vector3().addVectors(composedScene.camera.position, composedScene.camera.getWorldDirection()));
-        scenePointCloud.add( directionalLight );
+                    f3 = geometry3.faces[ i ];
+                    for( var j = 0; j < 3; j++ ) {
+                        vertexIndex = f3[ faceIndices[ j ] ];
+                        p = geometry3.vertices[ vertexIndex ];
+                        color = new THREE.Color( 0xffffff );
+                        color.setHSL( 0.125 * vertexIndex/geometry3.vertices.length, 1.0, 0.5 );
+                        f3.vertexColors[ j ] = color;
+                    }
+                }
+                var materials = [
+                    new THREE.MeshPhongMaterial( { color: 0xffffff, shading: THREE.FlatShading, vertexColors: THREE.VertexColors, shininess: 0 } ),
+                    new THREE.MeshBasicMaterial( { color: 0x000000, shading: THREE.FlatShading, wireframe: true, transparent: true } )
+                ];
+                group3 = THREE.SceneUtils.createMultiMaterialObject( geometry3, materials );
+                group3.position.x = 0;
+                group3.rotation.x = 0;
+                sceneManager.addToScene( group3 );
 
-        composedScene.camera.add(directionalLight);
-        sceneManager.addToScene(composedScene.camera);
-        sceneManager.addLight(directionalLight)
+                //var toolsManager = new LT.Defns.Tools.LT_MainViewerToolManager(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer);
+                //renderLocation, renderer, processor, camera
 
-        sceneManager.addLight(new THREE.AmbientLight( 0x555555 ))
+                //camera, renderer, pointcloud, useDEMCollisions
+                //var controlManager = new LT.Defns.Controls.LT_MainViewerControlsManager(composedScene.camera, composedScene.renderer, composedScene.pointcloud, useDEMCollisions);
+/*
+                sceneManager.addToScene(Potree.utils.createGrid(5, 5, 2));
+
+                var directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+                //directionalLight.position.set( 10, 10, 10 );
+                //directionalLight.lookAt( new THREE.Vector3(0, 0, 0));
+                var composedScene = sceneManager.composedScene;
+                directionalLight.position.copy(composedScene.camera.position);
+                directionalLight.lookAt(new THREE.Vector3().addVectors(composedScene.camera.position, composedScene.camera.getWorldDirection()));
+                composedScene.scenePointCloud.add( directionalLight );
+
+                composedScene.camera.add(directionalLight);
+                sceneManager.addToScene(composedScene.camera);
+                sceneManager.addLight(directionalLight)
+
+                sceneManager.addLight(new THREE.AmbientLight( 0x555555 ))
+                */
+            });
+
 
     }
 
-
+    /*
     function update(){
         LT.Instances.Engine.update();
         //Potree.pointLoadLimit = pointCountTarget * 2 * 1000 * 1000;
 
         //directionalLight.position.copy(camera.position);
         //directionalLight.lookAt(new THREE.Vector3().addVectors(camera.position, camera.getWorldDirection()));
-/*
-        if(pointcloud){
 
-            var bbWorld = Potree.utils.computeTransformedBoundingBox(pointcloud.boundingBox, pointcloud.matrixWorld);
-
-            if(!intensityMax){
-                var root = pointcloud.pcoGeometry.root;
-                if(root != null && root.loaded){
-                    var attributes = pointcloud.pcoGeometry.root.geometry.attributes;
-                    if(attributes.intensity){
-                        var array = attributes.intensity.array;
-                        var max = 0;
-                        for(var i = 0; i < array.length; i++){
-                            max = Math.max(array[i]);
-                        }
-
-                        if(max <= 1){
-                            intensityMax = 1;
-                        }else if(max <= 256){
-                            intensityMax = 255;
-                        }else{
-                            intensityMax = max;
-                        }
-                    }
-                }
-            }
-
-            if(heightMin === null){
-                heightMin = bbWorld.min.y;
-                heightMax = bbWorld.max.y;
-            }
-
-            pointcloud.material.clipMode = clipMode;
-            pointcloud.material.heightMin = heightMin;
-            pointcloud.material.heightMax = heightMax;
-            pointcloud.material.intensityMin = 0;
-            pointcloud.material.intensityMax = intensityMax;
-            pointcloud.showBoundingBox = showBoundingBox;
-            pointcloud.generateDEM = useDEMCollisions;
-            pointcloud.minimumNodePixelSize = minNodeSize;
-
-            if(!freeze){
-                pointcloud.update(camera, renderer);
-            }
-        }*/
 
         if(stats && showStats){
             document.getElementById("lblNumVisibleNodes").style.display = "";
@@ -1693,88 +1728,18 @@ LT.Initialise = function (setup){
 //        }
 
         // update progress bar
-        /*
-        if(pointcloud){
-            var progress = pointcloud.progress;
 
-            progressBar.progress = progress;
-
-            var message;
-            if(progress === 0 || pointcloud instanceof Potree.PointCloudArena4D){
-                message = "loading";
-            }else{
-                message = "loading: " + parseInt(progress*100) + "%";
-            }
-            progressBar.message = message;
-
-            if(progress === 1){
-                progressBar.hide();
-            }else if(progress < 1){
-                progressBar.show();
-            }
-        }
-
-*/
             //  In sceneManager.update() already.
         //volumeTool.update();
         //transformationTool.update();
         //profileTool.update();
 
-/*
-        var clipBoxes = [];
-
-        for(var i = 0; i < profileTool.profiles.length; i++){
-            var profile = profileTool.profiles[i];
-
-            for(var j = 0; j < profile.boxes.length; j++){
-                var box = profile.boxes[j];
-                box.updateMatrixWorld();
-                var boxInverse = new THREE.Matrix4().getInverse(box.matrixWorld);
-                clipBoxes.push(boxInverse);
-            }
-        }
-
-        for(var i = 0; i < volumeTool.volumes.length; i++){
-            var volume = volumeTool.volumes[i];
-
-            if(volume.clip){
-                volume.updateMatrixWorld();
-                var boxInverse = new THREE.Matrix4().getInverse(volume.matrixWorld);
-
-                clipBoxes.push(boxInverse);
-            }
-        }
-
-        if(pointcloud){
-            pointcloud.material.setClipBoxes(clipBoxes);
-        }*/
     }
-/*
-    function loop() {
-        requestAnimationFrame(loop);
-
-        LT.update();
-
-        if(sceneProperties.useEDL){
-            if(!edlRenderer){
-                edlRenderer = new EDLRenderer();
-            }
-            edlRenderer.render(renderer);
-        }else if(quality === "Splats"){
-            if(!highQualityRenderer){
-                highQualityRenderer = new HighQualityRenderer();
-            }
-            highQualityRenderer.render(renderer);
-        }else{
-            potreeRenderer.render();
-        }
-    };
-
-    initThree();
-    loop();*/
+     */
+    return initThree();
 }
-LT.Initialise(new LT.Defns.DefaultSetup());
 LT.Run = function(){
-    LT.Instances.Engine.Run();
+    LT.Instances.Engine.run();
 }
-LT.Run();
+
+

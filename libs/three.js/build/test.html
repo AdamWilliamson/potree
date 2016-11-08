@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - geometry - vertex colors</title>
+		<style>
+			body {
+				color: #808080;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+				background-color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="container"></div>
+		<div id="info"><a href="http://threejs.org" target="_blank">three.js</a> webgl - vertex colors</div>
+
+		<script src="three.js"></script>
+
+
+		<script>
+			var container, stats;
+			var camera, scene, renderer;
+			var mesh, group1, group2, group3, light;
+			var mouseX = 0, mouseY = 0;
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+			init();
+			animate();
+			function init() {
+				container = document.getElementById( 'container' );
+				
+				camera = new THREE.PerspectiveCamera( 20, window.innerWidth / window.innerHeight, 1, 10000 );
+				camera.position.z = 1800;
+				scene = new THREE.Scene();
+				
+				
+				
+				
+				AddLight();
+				
+				SetupRenderer();
+				
+				AddObjectToScene();
+			}
+			
+			function AddLight(){
+				light = new THREE.DirectionalLight( 0xffffff );
+				light.position.set( 0, 0, 1 );
+				scene.add( light );
+				}
+			
+			function SetupRenderer(){
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setClearColor( 0xffffff );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+			}
+			
+			function AddObjectToScene(){
+				var faceIndices = [ 'a', 'b', 'c' ];
+				var color, f, f2, f3, p, vertexIndex,
+				radius = 200,
+				geometry3 = new THREE.IcosahedronGeometry( radius, 1 );
+				for ( var i = 0; i < geometry3.faces.length; i ++ ) {
+					
+					f3 = geometry3.faces[ i ];
+					for( var j = 0; j < 3; j++ ) {
+						vertexIndex = f3[ faceIndices[ j ] ];
+						p = geometry3.vertices[ vertexIndex ];			
+						color = new THREE.Color( 0xffffff );
+						color.setHSL( 0.125 * vertexIndex/geometry3.vertices.length, 1.0, 0.5 );
+						f3.vertexColors[ j ] = color;
+					}
+				}
+				var materials = [
+				new THREE.MeshPhongMaterial( { color: 0xffffff, shading: THREE.FlatShading, vertexColors: THREE.VertexColors, shininess: 0 } ),
+				new THREE.MeshBasicMaterial( { color: 0x000000, shading: THREE.FlatShading, wireframe: true, transparent: true } )
+				];
+				group3 = THREE.SceneUtils.createMultiMaterialObject( geometry3, materials );
+				group3.position.x = 0;
+				group3.rotation.x = 0;
+				scene.add( group3 );
+			}
+			
+			//
+			function animate() {
+				requestAnimationFrame( animate );
+				render();
+			}
+			function render() {
+				renderer.render( scene, camera );
+			}
+		</script>
+
+	</body>
+</html>

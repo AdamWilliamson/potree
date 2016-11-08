@@ -3,17 +3,26 @@
 	<meta charset="utf-8"/>
 	<title>Potree Viewer</title>
 	<link rel="stylesheet" type="text/css" href="css/potree.css">
+	<style>
+		body {
+			font-family: Monospace;
+			background-color: #fff;
+			margin: 0px;
+			overflow: hidden;
+		}
+	</style>
 </head>
 <body>
 
 	<script src="../libs/three.js/build/three.js"></script>
+	<!--
 	<script src="../libs/other/stats.min.js"></script>
 	<script src="../libs/other/dat.gui.min.js"></script>
 	<script src="../libs/other/BinaryHeap.js"></script>
 	
 	<script src="../build/js/potree.js"></script>
 	<script src="./js/ProgressBar.js"></script>
-	
+	-->
 	
 	<!-- uncomment this to debug changes to the individual js files -->
 	<!--
@@ -73,8 +82,16 @@
 	</div>
 	
 	<div id="renderArea"></div>
-	
+	<script src="../libs/bluebird/bluebird.js"></script>
+	<script src="../src/Init">
+
+	</script>
 	<script>
+
+		LT.Initialise(new LT.Defns.DefaultSetup()).then(function(){
+			LT.Run();
+		});
+
 		/*
 		var sceneProperties = {
 			path:			"../resources/pointclouds/lion_takanawa/cloud.js",
