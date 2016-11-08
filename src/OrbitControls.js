@@ -493,7 +493,7 @@ Potree.OrbitControls = function ( object, domElement ) {
 	}
 
 	function onKeyDown( event ) {
-
+		console.log("KeyDown");
 		if ( scope.enabled === false || scope.noKeys === true || scope.noPan === true ) return;
 		
 		switch ( event.keyCode ) {

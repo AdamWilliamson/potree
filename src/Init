@@ -272,6 +272,10 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
         additiveRenderers: [],
         diContainer:null,
         sceneProperties:null,
+        setScene:function(sceneProperties, composedScene){
+            this.sceneProperties = sceneProperties;
+            this.composedScene = composedScene;
+        },
         addAdditionalRenderer: function(renderer){
             this.additiveRenderers.push(renderer);
         },
@@ -302,8 +306,9 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             //this.activeProcessor.render(this.composedScene, this.renderer);
             //this.processor.render(this.composedScene, this.renderer);
             //console.log("Rednering: " + this.composedScene.scene + " " + this.composedScene.camera);
+
             this.composedScene.renderer.render(this.composedScene.scene, this.composedScene.camera);
-            //this.composedScene.renderer.render(this.composedScene.scenePointCloud, this.composedScene.camera);
+            this.composedScene.renderer.render(this.composedScene.scenePointCloud, this.composedScene.camera);
             /*
             for(var i in this.additiveRenderers){
                 this.additiveRenderers[i].render();
@@ -333,6 +338,60 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             this.clipBoxes = this.clipBoxes.concat(clipBoxes);
         },
         update: function(){
+
+            if(this.composedScene.pointcloud){
+
+                var bbWorld = Potree.utils.computeTransformedBoundingBox(this.composedScene.pointcloud.boundingBox, this.composedScene.pointcloud.matrixWorld);
+
+                var heightMin = null;
+                if(heightMin === null){
+                    heightMin = bbWorld.min.y;
+                    heightMax = bbWorld.max.y;
+                }
+
+
+                var intensityMax = null;
+                if(!intensityMax){
+                    var root = this.composedScene.pointcloud.pcoGeometry.root;
+                    if(root != null && root.loaded){
+                        var attributes = this.composedScene.pointcloud.pcoGeometry.root.geometry.attributes;
+                        if(attributes.intensity){
+                            var array = attributes.intensity.array;
+                            var max = 0;
+                            for(var i = 0; i < array.length; i++){
+                                max = Math.max(array[i]);
+                            }
+
+                            if(max <= 1){
+                                intensityMax = 1;
+                            }else if(max <= 256){
+                                intensityMax = 255;
+                            }else{
+                                intensityMax = max;
+                            }
+                        }
+                    }
+                }
+
+                this.composedScene.pointcloud.material.clipMode = Potree.ClipMode.HIGHLIGHT_INSIDE;
+                this.composedScene.pointcloud.material.heightMin = heightMin;
+                this.composedScene.pointcloud.material.heightMax = heightMax;
+                this.composedScene.pointcloud.material.intensityMin = 0;
+                this.composedScene.pointcloud.material.intensityMax = intensityMax;
+                this.composedScene.pointcloud.showBoundingBox = true;
+                this.composedScene.pointcloud.generateDEM = false;
+                this.composedScene.pointcloud.minimumNodePixelSize = 100;
+
+                var freeze = false;
+                if(!freeze){
+                    this.composedScene.pointcloud.update(this.composedScene.camera, this.composedScene.renderer);
+                }
+            }
+
+
+
+
+
             return;
             this.clipBoxes = [];
             if(this.composedScene.pointcloud){
@@ -387,10 +446,8 @@ LT.Defns.Scene.SceneManager = LT.Helpers.Classes.create(
             }
         }
     },
-    function( sceneProperties, diContainer,composedScene){
-        this.sceneProperties = sceneProperties;
+    function(diContainer){
         this.diContainer = diContainer;
-        this.composedScene = composedScene;// new LT.Defns.Scene.ComposedScene();
     }
 );
 
@@ -819,10 +876,16 @@ LT.Defns.Controls.ControlsManager = LT.Helpers.Classes.create(
     {
         schemes:[],
         activeScheme:null,
+        diContainer: null,
+        controlProperties:null,
         addScheme: function(name, controlScheme){
             if (!(controlScheme instanceof LT.Defns.Controls.ControlScheme)) throw "Invalid control scheme instance";
 
             this.schemes[name] = controlScheme;
+
+            var composedScene = this.diContainer.resolve("SceneManager").getCurrentScene();
+
+            controlScheme.initialise(composedScene, this.controlProperties);
         },
         setActive:function(name){
             if (name == null)
@@ -843,8 +906,10 @@ LT.Defns.Controls.ControlsManager = LT.Helpers.Classes.create(
             }
         }
     },
-    function(){
-        window.addEventListener( 'keydown', this.onKeyDown, false );
+    function(diContainer, controlProperties){
+        this.diContainer = diContainer;
+        this.controlProperties = controlProperties;
+        //window.addEventListener( 'keydown', this.onKeyDown, false );
     }
 );
 
@@ -875,7 +940,7 @@ function(camera, renderer, pointcloud, useDEMCollisions){
     this.addScheme("Earth", new LT.Defns.Controls.EarthControlScheme(camera, renderer, pointcloud, useDEMCollisions));
     this.addScheme("Orbit", new LT.Defns.Controls.OrbitControlScheme(camera,renderer,pointcloud,useDEMCollisions));
 
-    this.setActive("Earth");
+    this.setActive("Orbit");
 });
 
 LT.Defns.Controls.ControlScheme = LT.Helpers.Classes.create({
@@ -943,28 +1008,30 @@ LT.Defns.Controls.OrbitControlScheme = LT.Helpers.Classes.inherit(LT.Defns.Contr
         controls:null,
         enable: function(){ this.controls.enabled = true; },
         disable: function(){ this.controls.enabled = false; },
-        update: function(delta){ controls.update(delta); }
-    },
-    function(camera, renderer, pointcloud, useDEMCollisions){
-        this.controls = new Potree.OrbitControls(camera, renderer.domElement);
-        this.controls.addEventListener("proposeTransform", function(event){
-            if(!pointcloud || !useDEMCollisions){
-                return;
+        update: function(delta){ this.controls.update(delta); },
+        initialise: function(composedScene, controlSettings){
+            this.controls = new Potree.OrbitControls(composedScene.camera, composedScene.renderer.domElement);
+            this.controls.addEventListener("proposeTransform", function(event){
+                if(!composedScene.pointcloud || !controlSettings.useDEMCollisions){
+                    return;
+                }
+
+                var demHeight = composedScene.pointcloud.getDEMHeight(event.newPosition);
+                if(event.newPosition.y < demHeight){
+                    event.objections++;
+
+                    var counterProposal = event.newPosition.clone();
+                    counterProposal.y = demHeight;
+
+                    event.counterProposals.push(counterProposal);
+                }
+            });
+
+            if(composedScene.pointcloud){
+                console.log("Centering on pointcloud");
+                composedScene.camera.zoomTo(composedScene.pointcloud, 1);
+                this.controls.target.copy(composedScene.pointcloud.boundingSphere.center.clone().applyMatrix4(composedScene.pointcloud.matrixWorld));
             }
-
-            var demHeight = pointcloud.getDEMHeight(event.newPosition);
-            if(event.newPosition.y < demHeight){
-                event.objections++;
-
-                var counterProposal = event.newPosition.clone();
-                counterProposal.y = demHeight;
-
-                event.counterProposals.push(counterProposal);
-            }
-        });
-
-        if(pointcloud){
-            this.controls.target.copy(pointcloud.boundingSphere.center.clone().applyMatrix4(pointcloud.matrixWorld));
         }
     }
 );
@@ -994,9 +1061,9 @@ LT.Defns.Loaders.PointClouds.PotreeDefault = LT.Helpers.Classes.inherit(LT.Defns
 
                 composedScene.pointcloud = new Potree.PointCloudOctree(geometry);
 
-                composedScene.pointcloud.material.pointSizeType = settings.getPointSizeType();//Potree.PointSizeType.ADAPTIVE;
+                composedScene.pointcloud.material.pointSizeType = settings.sceneProperties.getPointSizeType();//Potree.PointSizeType.ADAPTIVE;
                 composedScene.pointcloud.material.size = settings.pointSize;//pointSize;
-                composedScene.pointcloud.visiblePointsTarget = settings.pointCountTarget * 1000 * 1000;
+                composedScene.pointcloud.visiblePointsTarget = 1 * 1000 * 1000;
 
                 self.referenceFrame.add(composedScene.pointcloud);
 
@@ -1130,6 +1197,7 @@ LT.Defns.Loaders.ObjectLoader = LT.Helpers.Classes.create(
                     var promise = this.pointCloudLoaders[s].initialise(path,composedScene, setup);
                     var self = this;
                     promise.then(function(){
+                        //console.log("Adding point cloud to composedScene");
                         self._loadedPointClouds.push(composedScene.pointcloud);
                     });
 
@@ -1200,59 +1268,60 @@ LT.Defns.DefaultSetup = LT.Helpers.Classes.create({
         fov: 			75, 				// field of view in degree
         material: 		"RGB", 				// options: "RGB", "Height", "Intensity", "Classification"
         pointLimit: 	1,					// max number of points in millions
-        navigation: 	"Orbit",			// options: "Earth", "Orbit", "Flight"
-        mobileNavigation: "Orbit",
         pointSize: 		1.2,
         useEDL:			true,				// eye-dome-lighting, especially usefull for point clouds without normals
-        bgColor: "#AAAA00"
+        bgColor: "#AAAA00",
+        getPointSizeType : function () {
+            switch(this.sizeType.toLowerCase()){
+                case "fixed":       return Potree.PointSizeType.FIXED;
+                case "attenuated":  return Potree.PointSizeType.ATTENUATED;
+                case "adaptive":    return Potree.PointSizeType.ADAPTIVE;
+                default: return Potree.PointSizeType.ADAPTIVE;
+            }
+        },
+        getQuality: function (){
+            var value =this.quality.toLowerCase();
+            if(value == "interpolation" && !Potree.Features.SHADER_INTERPOLATION.isSupported()){
+                return "Squares";
+            }
+            else if(value == "splats" && !Potree.Features.SHADER_SPLATS.isSupported()){
+                return "Squares";
+            }
+            return this.quality;
+        },
+        getMaterial: function (){
+            switch(this.material.toLowerCase()){
+                case "rgb":         return Potree.PointColorType.RGB;
+                case "color":       return Potree.PointColorType.COLOR;
+                case "elevation":   return Potree.PointColorType.HEIGHT;
+                case "intensity":   return Potree.PointColorType.INTENSITY;
+                case "intensity gradient": return Potree.PointColorType.INTENSITY_GRADIENT;
+                case "classification":  return Potree.PointColorType.CLASSIFICATION;
+                case "return number":   return Potree.PointColorType.RETURN_NUMBER;
+                case "source":      return  Potree.PointColorType.SOURCE;
+                case "tree depth":  return Potree.PointColorType.TREE_DEPTH;
+                case "point index": return Potree.PointColorType.POINT_INDEX;
+                case "normal":      return Potree.PointColorType.NORMAL;
+                case "phong":       return Potree.PointColorType.PHONG;
+                default:            return Potree.PointColorType.RGB;
+            }
+        },
     },
     sceneObjects:{
-        potreePointCloud:null,//"../resources/pointclouds/lion_takanawa/cloud.js"
+        potreePointCloud: "../resources/pointclouds/lion_takanawa/cloud.js",
         nativeGeoms:["Sphere"]
     },
     controlProperties:{
         useDEMCollisions: false,
+        navigation: 	"Orbit",			// options: "Earth", "Orbit", "Flight"
+        mobileNavigation: "Orbit",
     },
     progress:{
         element: null,
         bar: null
     },
     toolProperties:[],
-    getPointSizeType : function () {
-        switch(this.sceneProperties.sizeType.toLowerCase()){
-            case "fixed":       return Potree.PointSizeType.FIXED;
-            case "attenuated":  return Potree.PointSizeType.ATTENUATED;
-            case "adaptive":    return Potree.PointSizeType.ADAPTIVE;
-            default: return Potree.PointSizeType.ADAPTIVE;
-        }
-    },
-    getQuality: function (){
-        var value =this.sceneProperties.quality.toLowerCase();
-        if(value == "interpolation" && !Potree.Features.SHADER_INTERPOLATION.isSupported()){
-            return "Squares";
-        }
-        else if(value == "splats" && !Potree.Features.SHADER_SPLATS.isSupported()){
-            return "Squares";
-        }
-        return this.sceneProperties.quality;
-    },
-    getMaterial: function (){
-        switch(this.sceneProperties.material.toLowerCase()){
-            case "rgb":         return Potree.PointColorType.RGB;
-            case "color":       return Potree.PointColorType.COLOR;
-            case "elevation":   return Potree.PointColorType.HEIGHT;
-            case "intensity":   return Potree.PointColorType.INTENSITY;
-            case "intensity gradient": return Potree.PointColorType.INTENSITY_GRADIENT;
-            case "classification":  return Potree.PointColorType.CLASSIFICATION;
-            case "return number":   return Potree.PointColorType.RETURN_NUMBER;
-            case "source":      return  Potree.PointColorType.SOURCE;
-            case "tree depth":  return Potree.PointColorType.TREE_DEPTH;
-            case "point index": return Potree.PointColorType.POINT_INDEX;
-            case "normal":      return Potree.PointColorType.NORMAL;
-            case "phong":       return Potree.PointColorType.PHONG;
-            default:            return Potree.PointColorType.RGB;
-        }
-    },
+
     getRenderArea: function(){
         return document.getElementById(this.renderArea);
     }
@@ -1268,51 +1337,52 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
     settings: null,
     loadingProgress: null,
     diContainer:null,
-    _initSceneManager:function(loadingProgress){ return new LT.Defns.Scene.SceneManager(this.settings.sceneProperties,this.diContainer,this.composedScene);},
-    _initControlManager:function(){ return new LT.Defns.Controls.ControlsManager();},
-    _initObjectLoader:function(){ return new LT.Defns.Loaders.ObjectLoader(this.loadingProgress);},
+    _initSceneManager:function(){ return new LT.Defns.Scene.SceneManager(this.diContainer);},
+    _initControlManager:function(){ return new LT.Defns.Controls.ControlsManager(this.diContainer, this.settings.controlProperties);},
+    _initObjectLoader:function(){ return new LT.Defns.Loaders.ObjectLoader();},
     _initComposedScene:function(width,height){ return new LT.Defns.Scene.ComposedScene(width,height);},
     _initToolsManager:function(diContainer){ return new LT.Defns.Tools.ToolManager(this.diContainer); },
     _initProgressTracker:function(element, bar){ return new LT.Defns.ProgressTracker(element, bar);},
     initialise: function(setup){
-        this.diContainer = new LT.DI.Injector();
+
 
         //this.loadingProgress = this._initProgressTracker(setup.progress.element, setup.progress.bar);
-        //this.clock = new THREE.Clock();
+        //this.diContainer.register("LoadingSystem",this.loadingProgress);
+        this.clock = new THREE.Clock();
         this.settings = setup;
         var renderLocation = setup.getRenderArea();
 
         this.composedScene = this._initComposedScene(window.innerWidth, window.innerHeight);
+
         console.log(renderLocation);
         console.log(this.composedScene.renderer);
         renderLocation.appendChild(this.composedScene.renderer.domElement);
 
-        //this.objectLoader = this._initObjectLoader();
-        //this.diContainer.register("ObjectLoader",{ object:this.objectLoader, scope:"Singleton" });
 
-        this.sceneManager = this._initSceneManager();
-        this.diContainer.register("SceneManager",{ object:this.sceneManager, scope:"Singleton" });
+        this.sceneManager.setScene(this.settings.sceneProperties, this.composedScene);
+
 
         var self = this;
         var promise;
 
-        //if (setup.sceneObjects && setup.sceneObjects.potreePointCloud)
-        //{
-//            promise = this.objectLoader.loadPointCloud(setup.sceneObjects.potreePointCloud, this.composedScene, setup);
-//
-  //      }
-//        else{
+        if (setup.sceneObjects && setup.sceneObjects.potreePointCloud)
+        {
+            console.log(this.objectLoader);
+            console.log("trying to load:"+ setup.sceneObjects.potreePointCloud);
+            console.dir(setup);
+            promise = this.objectLoader.loadPointCloud(setup.sceneObjects.potreePointCloud, this.composedScene, setup);
+
+        }
+        else{
             promise = Promise.resolve();
-//        }
-        promise.catch(function(){
-            throw "Error loading pointcloud";
-        });
+        }
         promise.then(function(){
 
 
 
             //self.toolsManager = self._initToolsManager(self.diContainer);
-            //self.controlsManager = self._initControlManager();
+            console.log("Setup Controls Manager");
+            self.controlsManager = self._initControlManager();
             //self.sceneManager.addAdditionalRenderer(self.toolsManager);
         });
         return promise;
@@ -1320,22 +1390,21 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
     update:function(){
         //console.log("Updating");
         Potree.pointLoadLimit = this.settings.sceneProperties.pointLimit * 2 * 1000 * 1000;// To millions.
-        this.sceneManager.update();
+
         //scene camera
         // Pass into SceneManager, the scene proeprties.. DUH!
         //this.composedScene.camera.fov = this.settings.sceneProperties.fov;
         //controls.update
-        //this.controlsManager.update(this.clock.getDelta());
+        this.controlsManager.update(this.clock.getDelta());
         //this.toolsManager.update();
+        this.sceneManager.update();
 
-
-        //this.objectLoader.update();
+        this.objectLoader.update();
         this.sceneManager.postUpdate();
 
     },
     run:function(){
-        console.log("Engine.Run");
-        //this.update();
+        this.update();
 /*
         if(this.settings.sceneProperties.useEDL){
             this.sceneManager.setActiveProcessor("EDL");
@@ -1350,6 +1419,12 @@ LT.Defns.Engine.LTEngine = LT.Helpers.Classes.create({
         this.sceneManager.render();
         requestAnimationFrame(this.run.bind(this));
     }
+},function(){
+    this.diContainer = new LT.DI.Injector();
+    this.sceneManager = this._initSceneManager();
+    this.diContainer.register("SceneManager",{object:this.sceneManager, scope:"Singleton" });
+    this.objectLoader = this._initObjectLoader();
+    this.diContainer.register("ObjectLoader",{ object:this.objectLoader, scope:"Singleton" });
 });
 
 LT.Initialise = function (setup){
@@ -1635,6 +1710,8 @@ LT.Initialise = function (setup){
             return sm;
         }
 */
+        LT.Instances.Engine.objectLoader.addPointCloudLoader(new LT.Defns.Loaders.PointClouds.PotreeDefault());
+
         return LT.Instances.Engine.initialise(LT.ActiveSetup)
             .then(function(){
 
@@ -1668,6 +1745,12 @@ LT.Initialise = function (setup){
                 group3.rotation.x = 0;
                 sceneManager.addToScene( group3 );
 
+                var controlsManager = LT.Instances.Engine.controlsManager;
+
+
+                controlsManager.addScheme("Orbit", new LT.Defns.Controls.OrbitControlScheme());
+                controlsManager.setActive("Orbit");
+
                 //var toolsManager = new LT.Defns.Tools.LT_MainViewerToolManager(composedScene.scenePointCloud, composedScene.camera, composedScene.renderer);
                 //renderLocation, renderer, processor, camera
 
@@ -1690,7 +1773,8 @@ LT.Initialise = function (setup){
 
                 sceneManager.addLight(new THREE.AmbientLight( 0x555555 ))
                 */
-            });
+            })
+
 
 
     }

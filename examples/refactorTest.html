@@ -18,12 +18,14 @@
 	<!--
 	<script src="../libs/other/stats.min.js"></script>
 	<script src="../libs/other/dat.gui.min.js"></script>
-	<script src="../libs/other/BinaryHeap.js"></script>
+
 	
-	<script src="../build/js/potree.js"></script>
+
 	<script src="./js/ProgressBar.js"></script>
 	-->
-	
+	<script src="../libs/other/BinaryHeap.js"></script>
+	<script src="../build/js/potree.js"></script>
+
 	<!-- uncomment this to debug changes to the individual js files -->
 	<!--
 	<script src="../src/PointCloudOctree.js"></script>
@@ -90,6 +92,10 @@
 
 		LT.Initialise(new LT.Defns.DefaultSetup()).then(function(){
 			LT.Run();
+		})
+		.catch(function(error){
+			console.log(error);
+			alert(error);
 		});
 
 		/*
