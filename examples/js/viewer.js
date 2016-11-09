@@ -542,7 +542,7 @@ function onKeyDown(event){
 var intensityMax = null;
 var heightMin = null;
 var heightMax = null;
-
+var bbWorld = null;
 function update(){
 	Potree.pointLoadLimit = pointCountTarget * 2 * 1000 * 1000;
 	
@@ -550,7 +550,9 @@ function update(){
 	//directionalLight.lookAt(new THREE.Vector3().addVectors(camera.position, camera.getWorldDirection()));
 
 	if(pointcloud){
-	
+
+		if (!bbWorld)
+		{
 		var bbWorld = Potree.utils.computeTransformedBoundingBox(pointcloud.boundingBox, pointcloud.matrixWorld);
 			intensityMax = null;
 		if(!intensityMax){
@@ -591,9 +593,9 @@ function update(){
 		
 		if(!freeze){
 			pointcloud.update(camera, renderer);
-		}
+		}}
 	}
-	/*
+
 	if(stats && showStats){
 		document.getElementById("lblNumVisibleNodes").style.display = "";
 	    document.getElementById("lblNumVisiblePoints").style.display = "";
@@ -685,7 +687,7 @@ function update(){
 	//	
 	//	var a;
 	//}
-*/
+
 }
 
 function useEarthControls(){
@@ -765,21 +767,21 @@ var PotreeRenderer = function(){
 			var height = elRenderArea.clientHeight;
 			var aspect = width / height;
 			
-			//camera.aspect = aspect;
-			//camera.updateProjectionMatrix();
+			camera.aspect = aspect;
+			camera.updateProjectionMatrix();
 			
-//			renderer.setSize(width, height);
+			renderer.setSize(width, height);
 		}
 		
 
 		// render skybox
-//		if(showSkybox){
-			//skybox.camera.rotation.copy(camera.rotation);
-			//renderer.render(skybox.scene, skybox.camera);
-		//}else{
-//			renderer.render(sceneBG, cameraBG);
-		//}
-		/*
+		if(showSkybox){
+			skybox.camera.rotation.copy(camera.rotation);
+			renderer.render(skybox.scene, skybox.camera);
+		}else{
+			renderer.render(sceneBG, cameraBG);
+		}
+
 		if(pointcloud){
 			if(pointcloud.originalMaterial){
 				pointcloud.material = pointcloud.originalMaterial;
@@ -796,17 +798,17 @@ var PotreeRenderer = function(){
 			pointcloud.material.interpolate = (quality === "Interpolation");
 			pointcloud.material.weighted = false;
 		}
-		*/
+
 		// render scene
 		//renderer.render(scene, camera);
 		renderer.render(scenePointCloud, camera);
 		
-		//profileTool.render();
-		//volumeTool.render();
+		profileTool.render();
+		volumeTool.render();
 		
-		//renderer.clearDepth();
-		//measuringTool.render();
-		//transformationTool.render();
+		renderer.clearDepth();
+		measuringTool.render();
+		transformationTool.render();
 	};
 };
 var potreeRenderer = new PotreeRenderer();

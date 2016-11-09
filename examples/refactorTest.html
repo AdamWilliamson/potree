@@ -15,11 +15,11 @@
 <body>
 
 	<script src="../libs/three.js/build/three.js"></script>
-	<!--
+
 	<script src="../libs/other/stats.min.js"></script>
 	<script src="../libs/other/dat.gui.min.js"></script>
 
-	
+	<!--
 
 	<script src="./js/ProgressBar.js"></script>
 	-->
@@ -90,12 +90,15 @@
 	</script>
 	<script>
 
-		LT.Initialise(new LT.Defns.DefaultSetup()).then(function(){
+		var settings = new LT.Defns.DefaultSetup();
+		LT.Initialise(settings).then(function(){
 			LT.Run();
+			initGUI(settings);
 		})
 		.catch(function(error){
 			console.log(error);
 			alert(error);
+
 		});
 
 		/*
