@@ -154,7 +154,7 @@ Potree.PointCloudOctree.prototype.updateVisibility = function(camera, renderer){
 			}
 			
 			if(this.showBoundingBox && !node.boundingBoxNode){
-				var boxHelper = new THREE.BoxHelper(node.sceneNode);
+                var boxHelper = new THREE.BoxHelper(node.sceneNode.geometry.boundingBox);
 				this.add(boxHelper);
 				this.boundingBoxNodes.push(boxHelper);
 				node.boundingBoxNode = boxHelper;
