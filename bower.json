@@ -1,0 +1,15 @@
+{
+  "ignore": [
+    "**/.*",
+	"docs",
+	"examples",
+	"resources",
+    "node_modules",
+    "bower_components",
+    "test",
+    "package.json",
+    "src",
+	"gulpfile",
+	"README.md"
+  ]
+}
